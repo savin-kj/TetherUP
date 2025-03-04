@@ -60,3 +60,146 @@ void showScanMessage() {
   matrix.setTextColor(matrix.Color333(7, 7, 7));
   matrix.print("Scan RFID");
 }
+
+// 📌📌📌📌📌📌📌📌📌📌📌 This is another (new code, also working and prefered)
+
+
+// New updated RFID & LED Matrix code with more aesthetic vibe.
+
+#include <SPI.h>
+#include <MFRC522.h>
+#include <RGBmatrixPanel.h>
+#define SS_PIN 53
+#define RST_PIN 49
+#define CLK  11
+#define OE   9
+#define LAT 10
+#define A   A0
+#define B   A1
+#define C   A2
+#define D   A3
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+RGBmatrixPanel matrix(A, B, C, D, CLK, LAT, OE, false, 64);
+
+// Worker database (UID, Name, Task)
+struct Worker {
+  const char* uid;
+  const char* name;
+  const char* task;
+};
+
+Worker workers[] = {
+  {"23E3D0D9", "Vimal", "Check Inventory"}, 
+  {"E5F6G7H8", "Abhiram", "Assemble Parts on Line 3"},
+  {"3E45973F", "Aswin", "Perform Quality Check and Report Issues to TetherUp"}, 
+  {"55667788", "Savin", "Packaging and Labeling Boxes for Shipment"},
+};
+
+const int numWorkers = sizeof(workers) / sizeof(workers[0]);
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  rfid.PCD_Init();
+  matrix.begin();
+  showScanMessage();  // Show "Scan RFID" at startup
+}
+
+void loop() {
+  if (!rfid.PICC_IsNewCardPresent()) return;
+  if (!rfid.PICC_ReadCardSerial()) return;
+
+  // Convert UID to a string
+  char uidString[20] = ""; 
+  for (byte i = 0; i < rfid.uid.size; i++) {
+    char hex[3];
+    sprintf(hex, "%02X", rfid.uid.uidByte[i]);
+    strcat(uidString, hex);
+  }
+  
+  Serial.print("Scanned UID: ");
+  Serial.println(uidString);
+
+  // Check if UID exists in the database
+  const char* workerName = "Unknown";
+  const char* workerTask = "Not Assigned";
+  
+  for (int i = 0; i < numWorkers; i++) {
+    if (strcmp(uidString, workers[i].uid) == 0) {
+      workerName = workers[i].name;
+      workerTask = workers[i].task;
+      break;
+    }
+  }
+
+  // Display worker's name
+  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
+  matrix.setCursor(5, 5);
+  matrix.setTextColor(matrix.Color333(7, 0, 0));
+  matrix.print("Hello");
+
+  matrix.setCursor(15, 17);
+  matrix.setTextColor(matrix.Color333(0, 7, 0));
+  matrix.print(workerName);
+
+  delay(2000); // Show "Hello, Name" for 2 seconds
+
+  // Display task centered with word wrapping
+  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
+  displayTaskCentered(workerTask, matrix.Color333(0, 0, 7));
+
+  // Show "Scan RFID" again
+  showScanMessage();
+}
+
+// Function to display text centered with word wrapping
+void displayTaskCentered(const char* text, uint16_t color) {
+  char buffer[100];
+  strcpy(buffer, text); // Copy task text to buffer
+
+  char* words[20]; // Array to store words
+  int wordCount = 0;
+
+  // Split text into words
+  char* word = strtok(buffer, " ");
+  while (word != NULL && wordCount < 20) {
+    words[wordCount++] = word;
+    word = strtok(NULL, " ");
+  }
+
+  int x = 10;  // Start text closer to the center
+  int y = 8;   // Start in the middle row (adjust as needed)
+  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
+  matrix.setTextColor(color);
+
+  for (int i = 0; i < wordCount; i++) {
+    int wordWidth = strlen(words[i]) * 6;
+    if (x + wordWidth > 62) { // If word doesn't fit, move to next line
+      x = 10;  
+      y += 10; // Move down
+      if (y > 22) { // If screen is full, clear and restart
+        delay(1000);
+        matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
+        y = 8;  // Reset to middle
+      }
+    }
+    matrix.setCursor(x, y);
+    matrix.print(words[i]);
+    x += wordWidth + 6; // Move cursor forward
+    delay(500);
+  }
+  delay(2000);
+}
+
+// Function to show "Scan RFID" message
+void showScanMessage() {
+  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
+  matrix.setCursor(6, 12);
+  matrix.setTextColor(matrix.Color333(7, 7, 7));
+  matrix.print("Scan RFID");
+}
+
+
+
+
