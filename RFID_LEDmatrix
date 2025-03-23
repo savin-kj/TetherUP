@@ -1,5 +1,7 @@
+❗❗❗❗❗❗ ARDUINO MEGA CODE 
 
-// working code of rfid and led matrix
+// mega updated and ultimate working code -> final code
+
 #include <SPI.h>
 #include <MFRC522.h>
 #include <RGBmatrixPanel.h>
@@ -17,100 +19,35 @@
 MFRC522 rfid(SS_PIN, RST_PIN);
 RGBmatrixPanel matrix(A, B, C, D, CLK, LAT, OE, false, 64);
 
-void setup() {
-  Serial.begin(9600);
-  SPI.begin();
-  rfid.PCD_Init();
-  matrix.begin();
-  showScanMessage();  // Show "Scan RFID" at startup
-}
-
-void loop() {
-  if (!rfid.PICC_IsNewCardPresent()) return;
-  if (!rfid.PICC_ReadCardSerial()) return;
-
-  // Convert UID to a string without colons
-  char uidString[20] = ""; 
-  for (byte i = 0; i < rfid.uid.size; i++) {
-    char hex[3];
-    sprintf(hex, "%02X", rfid.uid.uidByte[i]); // Convert to HEX without colons
-    strcat(uidString, hex);
-  }
-  
-  // Display UID on LED matrix
-  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
-  matrix.setCursor(5, 5);
-  matrix.setTextColor(matrix.Color333(7, 0, 0));
-  matrix.print("RFID UID:");
-  
-  matrix.setCursor(5, 18);
-  matrix.setTextColor(matrix.Color333(0, 7, 0));
-  matrix.print(uidString);
-
-  delay(3000); // Show UID for 2 seconds
-  
-  // Show "Scan RFID" again
-  showScanMessage();
-}
-
-// Function to show "Scan RFID" message
-void showScanMessage() {
-  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
-  matrix.setCursor(6, 12);
-  matrix.setTextColor(matrix.Color333(7, 7, 7));
-  matrix.print("Scan RFID");
-}
-
-// 📌📌📌📌📌📌📌📌📌📌📌 This is another (new code, also working and prefered)
-
-
-// New updated RFID & LED Matrix code with more aesthetic vibe.
-
-#include <SPI.h>
-#include <MFRC522.h>
-#include <RGBmatrixPanel.h>
-#define SS_PIN 53
-#define RST_PIN 49
-#define CLK  11
-#define OE   9
-#define LAT 10
-#define A   A0
-#define B   A1
-#define C   A2
-#define D   A3
-
-MFRC522 rfid(SS_PIN, RST_PIN);
-RGBmatrixPanel matrix(A, B, C, D, CLK, LAT, OE, false, 64);
-
-// Worker database (UID, Name, Task)
+// Worker database
 struct Worker {
   const char* uid;
   const char* name;
-  const char* task;
+  String task;
 };
 
 Worker workers[] = {
-  {"23E3D0D9", "Vimal", "Check Inventory"}, 
-  {"E5F6G7H8", "Abhiram", "Assemble Parts on Line 3"},
-  {"3E45973F", "Aswin", "Perform Quality Check and Report Issues to TetherUp"}, 
-  {"55667788", "Savin", "Packaging and Labeling Boxes for Shipment"},
+  {"23E3D0D9", "Worker 1", "Awaiting Task"}, 
+  {"3E45973F", "Worker 2", "Awaiting Task"}, 
 };
 
 const int numWorkers = sizeof(workers) / sizeof(workers[0]);
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
+  Serial1.begin(57600);  // Lower baud rate for stable communication
   SPI.begin();
   rfid.PCD_Init();
   matrix.begin();
-  showScanMessage();  // Show "Scan RFID" at startup
+  showScanMessage();
 }
 
 void loop() {
+  updateTasksFromESP();  
+
   if (!rfid.PICC_IsNewCardPresent()) return;
   if (!rfid.PICC_ReadCardSerial()) return;
 
-  // Convert UID to a string
   char uidString[20] = ""; 
   for (byte i = 0; i < rfid.uid.size; i++) {
     char hex[3];
@@ -121,9 +58,8 @@ void loop() {
   Serial.print("Scanned UID: ");
   Serial.println(uidString);
 
-  // Check if UID exists in the database
   const char* workerName = "Unknown";
-  const char* workerTask = "Not Assigned";
+  String workerTask = "No Task Assigned";
   
   for (int i = 0; i < numWorkers; i++) {
     if (strcmp(uidString, workers[i].uid) == 0) {
@@ -133,73 +69,227 @@ void loop() {
     }
   }
 
-  // Display worker's name
-  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
-  matrix.setCursor(5, 5);
+  displayWorkerInfo(workerName, workerTask);
+}
+
+// Update worker tasks from ESP32
+void updateTasksFromESP() {
+  while (Serial1.available()) {
+    String receivedData = Serial1.readStringUntil('\n');
+    Serial1.flush();  // Clear buffer after reading
+    Serial.println("Data Received: " + receivedData);
+
+    int separatorIndex = receivedData.indexOf('|');
+    if (separatorIndex == -1) return;
+
+    int workerID = receivedData.substring(0, separatorIndex).toInt();
+    String task = receivedData.substring(separatorIndex + 1);
+
+    if (workerID >= 1 && workerID <= numWorkers) {
+      workers[workerID - 1].task = task;
+      Serial.println("Updated Task for Worker " + String(workerID) + ": " + task);
+    }
+  }
+}
+
+// Display worker info on RGB matrix
+void displayWorkerInfo(const char* name, String task) {
+  matrix.fillScreen(matrix.Color333(0, 0, 0));  
+
+  int helloX = (64 - (strlen("Hello") * 6)) / 2;
+  matrix.setCursor(helloX, 5);
   matrix.setTextColor(matrix.Color333(7, 0, 0));
   matrix.print("Hello");
 
-  matrix.setCursor(15, 17);
+  int nameX = (64 - (strlen(name) * 6)) / 2;
+  matrix.setCursor(nameX, 17);
   matrix.setTextColor(matrix.Color333(0, 7, 0));
-  matrix.print(workerName);
+  matrix.print(name);
 
-  delay(2000); // Show "Hello, Name" for 2 seconds
+  delay(2000);
 
-  // Display task centered with word wrapping
-  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
-  displayTaskCentered(workerTask, matrix.Color333(0, 0, 7));
+  displayTaskWrapped(task.c_str(), matrix.Color333(0, 0, 7));
 
-  // Show "Scan RFID" again
   showScanMessage();
 }
 
-// Function to display text centered with word wrapping
-void displayTaskCentered(const char* text, uint16_t color) {
-  char buffer[100];
-  strcpy(buffer, text); // Copy task text to buffer
+// Display task with wrapping
+void displayTaskWrapped(const char* text, uint16_t color) {
+  matrix.fillScreen(matrix.Color333(0, 0, 0));
+  matrix.setTextColor(color);
 
-  char* words[20]; // Array to store words
+  char buffer[100];
+  strcpy(buffer, text);
+
+  char* words[20];
   int wordCount = 0;
 
-  // Split text into words
   char* word = strtok(buffer, " ");
   while (word != NULL && wordCount < 20) {
     words[wordCount++] = word;
     word = strtok(NULL, " ");
   }
 
-  int x = 10;  // Start text closer to the center
-  int y = 8;   // Start in the middle row (adjust as needed)
-  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
-  matrix.setTextColor(color);
+  int x = 2;
+  int y = 5;
 
   for (int i = 0; i < wordCount; i++) {
     int wordWidth = strlen(words[i]) * 6;
-    if (x + wordWidth > 62) { // If word doesn't fit, move to next line
-      x = 10;  
-      y += 10; // Move down
-      if (y > 22) { // If screen is full, clear and restart
+
+    if (x + wordWidth > 62) { 
+      x = 2;
+      y += 10;
+      if (y > 28) {
         delay(1000);
-        matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
-        y = 8;  // Reset to middle
+        matrix.fillScreen(matrix.Color333(0, 0, 0));
+        y = 5;
       }
     }
+
     matrix.setCursor(x, y);
     matrix.print(words[i]);
-    x += wordWidth + 6; // Move cursor forward
-    delay(500);
+    x += wordWidth + 6;
+    delay(300);
   }
+
   delay(2000);
 }
 
-// Function to show "Scan RFID" message
 void showScanMessage() {
-  matrix.fillScreen(matrix.Color333(0, 0, 0)); // Clear screen
-  matrix.setCursor(6, 12);
+  matrix.fillScreen(matrix.Color333(0, 0, 0));
+  int scanX = (64 - (strlen("Scan RFID") * 6)) / 2;
+  matrix.setCursor(scanX, 12);
   matrix.setTextColor(matrix.Color333(7, 7, 7));
   matrix.print("Scan RFID");
 }
 
+❗❗❗❗ ESP32 AND BLYNK CODE ❗❗❗❗❗❗
+
+// esp updated and final working code -> final code
+
+#define BLYNK_TEMPLATE_ID "TMPL3S3i4x-Lq"
+#define BLYNK_TEMPLATE_NAME "Rfid"
+#define BLYNK_AUTH_TOKEN "OH-T6ep9m0kIuo2ApBZvijZogh0GO0iH"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "GalaxyS20fe";
+char pass[] = "Behappyshit";
+
+// Serial communication with Mega
+#define RX_PIN 16
+#define TX_PIN 17
+HardwareSerial mySerial(2);
+
+// Blynk callback for Worker 1 (V1)
+BLYNK_WRITE(V1) {
+  String task = param.asString();
+  sendTaskToMega(1, task);
+}
+
+// Blynk callback for Worker 2 (V2)
+BLYNK_WRITE(V2) {
+  String task = param.asString();
+  sendTaskToMega(2, task);
+}
+
+// Send task to Mega
+void sendTaskToMega(int workerID, String task) {
+  String message = String(workerID) + "|" + task;
+  mySerial.println(message);
+  Serial.println("Sent to Mega: " + message);
+  delay(100);  // Prevents data loss
+}
+
+void setup() {
+  Serial.begin(115200);
+  mySerial.begin(57600, SERIAL_8N1, RX_PIN, TX_PIN);
+
+  Blynk.begin(auth, ssid, pass);
+  Serial.println("Connected to Blynk and WiFi!");
+}
+
+void loop() {
+  Blynk.run();
+}
+
+❗❗❗❗❗ ESP , VR AND LCD CODE ❗❗❗❗❗ 
 
 
+// working code of esp32 , VR module and lcd  -> Final code
 
+// edited "VoiceRecognitionV3.h" code with vs code for esp32 | [C:\Users\user\Documents\Arduino\libraries\VoiceRecognitionV3-master]
+
+// updated with array accessing and solved LCD blank issues.
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include "VoiceRecognitionV3.h" 
+
+#define VR_RX 16  // ESP32 RX (connect to VR module TX)
+#define VR_TX 17  // ESP32 TX (connect to VR module RX)
+
+#define I2C_SDA 21  // ESP32 I2C SDA
+#define I2C_SCL 22  // ESP32 I2C SCL
+
+TwoWire I2C_LCD = TwoWire(0);  // Create I2C instance
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // Change 0x27 to 0x3F if needed
+
+VR myVR(VR_RX, VR_TX);  
+uint8_t buf[64];
+
+void setup() {
+  Serial.begin(115200);
+  myVR.begin(9600);
+
+  Wire.begin(I2C_SDA, I2C_SCL);  // Ensure I2C is started first
+  delay(500);  // Allow some time for I2C stabilization
+  
+  lcd.begin(16, 2);  
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Listening"); 
+  lcd.setCursor(0, 1);
+  lcd.print("   Speak now!");
+
+  for (int i = 0; i < 7; i++) {  
+    if (myVR.load(i) >= 0) {
+      Serial.print("Loaded Cmd: ");
+      Serial.println(i);
+    } else {
+      Serial.print("Failed Cmd: ");
+      Serial.println(i);
+    }
+  }
+}
+
+void loop() {
+  int ret = myVR.recognize(buf, 50);
+  if (ret > 0) {
+    Serial.print("Recognized Cmd: ");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    
+    // Response Mapping
+    const char* responses[] = {"OK", "YES", "NO", "YES", "YES", "NO", "NO"};
+    
+    if (buf[1] < 7) {
+        Serial.println(responses[buf[1]]);
+        lcd.print(responses[buf[1]]);
+    } else {
+        Serial.println("Unknown");
+        lcd.print("Unknown");
+    }
+    
+    delay(2000); // Display recognized word for 2 seconds
+    lcd.clear();
+
+    // Restore "Listening..." message
+    lcd.setCursor(0, 0);
+    lcd.print("Listening");
+    lcd.setCursor(0, 1);
+    lcd.print("   Speak now!");
+  }
+}
